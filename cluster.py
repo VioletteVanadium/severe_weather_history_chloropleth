@@ -69,7 +69,7 @@ NORMALIZE_COLUMNS.remove("TOR_F_SCALE")
 NUMERIC_COLUMNS = NORMALIZE_COLUMNS + EVENT_TYPES
 
 CLUSTER_METHOD = sk_cluster.MiniBatchKMeans
-KWARGS = {"n_clusters": 20}
+KWARGS = {"n_clusters": 10}
 ATTR = "cluster_centers_"
 TRAIN_PCT = 0.5
 

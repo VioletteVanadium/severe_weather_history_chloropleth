@@ -27,7 +27,7 @@ def main():
     geo_data = geo_data.set_index("FIPS")["SEVERITY"]
     geo_data = geo_data.dropna()
     colorscale = branca.colormap.LinearColormap(
-        colors=["#ffffff", "#ff0044"], vmin=geo_data.min(), vmax=geo_data.max()
+        colors=["white", "red"], vmin=geo_data.min(), vmax=geo_data.max()
     )
 
     m = folium.Map(location=[39, -98], tiles="cartodbpositron", zoom_start=5)
