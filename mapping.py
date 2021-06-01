@@ -1,87 +1,79 @@
 #! /usr/bin/env python3
 import json
+from urllib.request import urlopen
 
 import branca
 import fiona
 import folium
 import numpy as np
 import pandas as pd
+import plotly.express as px
 from shapely.geometry.multipolygon import MultiPolygon
 from shapely.geometry.polygon import Polygon
+
+NORM_AREA = True
 
 
 def main():
     def style_function(feature):
         try:
             severity = float(geo_data[feature["id"]])
+            color = colorscale(severity)
         except KeyError:
-            severity = 0
-        color = colorscale(severity)
+            color = "#ffffff"
         return {
             "fillOpacity": 0.8,
             "weight": 0,
             "fillColor": color,
         }
 
+    with urlopen(
+        "https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json"
+    ) as response:
+        counties = json.load(response)
+
     geo_data = pd.read_pickle("fips_severity.pkl")
-    geo_data["FIPS"] = geo_data["FIPS"].map(lambda x: "0500000US{}".format(x))
     geo_data = geo_data.set_index("FIPS")["SEVERITY"]
 
-    area_data = get_areas()
-    fill_val = area_data.mean()
-    geo_data = pd.concat([geo_data, area_data], axis=1)
-    geo_data = geo_data.apply(
-        lambda x: pd.Series(
-            [
-                (x["SEVERITY"] / x["AREA"])
-                if not pd.isna(x["AREA"])
-                else (x["SEVERITY"] / fill_val)
-            ],
-        ),
-        axis=1,
-    )
-    geo_data.columns = ["SEVERITY"]
-    geo_data = geo_data["SEVERITY"]
-    geo_data = geo_data.dropna()
+    if NORM_AREA:
+        area_data = pd.read_pickle("fips_area.pkl")
+        geo_data = geo_data.divide(area_data)
+        with pd.option_context("mode.use_inf_as_na", True):
+            geo_data = geo_data.dropna()
 
-    colorscale = branca.colormap.LinearColormap(
-        colors=["white", "red"], vmin=geo_data.min(), vmax=geo_data.max()
+    geo_data = geo_data.map(lambda x: (x - geo_data.mean()) / geo_data.std())
+    geo_data = pd.DataFrame(
+        {"FIPS": geo_data.index, "SEVERITY": geo_data.values}
     )
+    print(geo_data.describe())
+
+    fig = px.choropleth(
+        geo_data,
+        geojson=counties,
+        locations="FIPS",
+        color="SEVERITY",
+        scope="usa",
+        range_color=(-1, 1),
+    )
+    fig.show()
+    exit()
 
     m = folium.Map(location=[39, -98], zoom_start=5)
-
     with open("topo_json_us_counties.json") as f:
-        topo_str = f.read()
-    topo = folium.TopoJson(
-        json.loads(topo_str),
-        "objects.us_counties_20m",
-        style_function=style_function,
-    )
-    topo.add_to(m)
-
+        topo = json.load(f)
+    folium.Choropleth(
+        geo_data=topo,
+        data=geo_data.reset_index(),
+        columns=["FIPS", "SEVERITY"],
+        key_on="feature.id",
+        topojson="objects.us_counties_20m",
+        fill_color="Reds",
+        fill_opacity=1,
+        line_opacity=1,
+        legend_name="Sever Weather Intensity",
+        bins=8,
+    ).add_to(m)
     m.save("map.html")
-
-
-def get_areas():
-    shape = fiona.open("topo_json_us_counties-polygon.shp")
-    data = []
-    for s in shape.items():
-        fips = s[1]["properties"]["id"]
-        geom = s[1]["geometry"]
-        polygons = []
-        for tmp in geom["coordinates"]:
-            try:
-                polygons.append(Polygon(tmp))
-            except ValueError:
-                polygons.append(Polygon(tmp[0]))
-        polygon = MultiPolygon(polygons)
-        area = polygon.area
-        data.append((fips, np.abs(area)))
-    data.sort(key=lambda x: x[0])
-    data = pd.DataFrame(data)
-    data.columns = ["FIPS", "AREA"]
-    data = data.set_index("FIPS")["AREA"]
-    return data
 
 
 if __name__ == "__main__":

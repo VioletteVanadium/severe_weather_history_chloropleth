@@ -40,6 +40,7 @@ def main():
 
     fips_ranksum = {}
     for filename in os.listdir("labeled_data"):
+        # year = (int(filename.split(".")[0]) - 1950) / (2020 - 1950)
         filename = os.path.join("labeled_data", filename)
         data = pd.read_pickle(filename)
         data = data[["FIPS", "RANK"]]
@@ -47,11 +48,9 @@ def main():
         for fip in data.index:
             fips_ranksum.setdefault(fip, 0)
             fips_ranksum[fip] += data.loc[fip, "RANK"]
+            # fips_ranksum[fip] += data.loc[fip, "RANK"] * year
 
     data = pd.DataFrame(fips_ranksum.items(), columns=["FIPS", "SEVERITY"])
-    std = data["SEVERITY"].std()
-    mean = data["SEVERITY"].mean()
-    data["SEVERITY"] = data["SEVERITY"].map(lambda x: (x - mean) / std)
     print(data.describe())
     data.to_pickle("fips_severity.pkl")
 
