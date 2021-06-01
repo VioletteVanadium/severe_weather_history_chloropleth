@@ -37,6 +37,7 @@ def main():
 
     if NORM_AREA:
         area_data = pd.read_pickle("fips_area.pkl")
+        area_data = area_data / area_data.mean()
         geo_data = geo_data.divide(area_data)
         with pd.option_context("mode.use_inf_as_na", True):
             geo_data = geo_data.dropna()

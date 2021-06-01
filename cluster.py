@@ -11,22 +11,22 @@ from preprocess import NORMALIZE_COLUMNS
 
 pd.set_option("display.max_columns", None)
 EVENT_TYPES = [
-    "Lakeshore Flood",
-    "Astronomical Low Tide",
-    "Lightning",
+    # "Lakeshore Flood",
+    # "Astronomical Low Tide",
+    # "Lightning",
     "Avalanche",
     "Blizzard",
-    "Coastal Flood",
-    "Cold/Wind Chill",
-    "Debris Flow",
-    "Rip Current",
-    "Dense Fog",
-    "Seiche",
-    "Dense Smoke",
+    # "Coastal Flood",
+    # "Cold/Wind Chill",
+    # "Debris Flow",
+    # "Rip Current",
+    # "Dense Fog",
+    # "Seiche",
+    # "Dense Smoke",
     "Sleet",
     "Drought",
     "Storm Surge/Tide",
-    "Dust Devil",
+    # "Dust Devil",
     "Strong Wind",
     "Dust Storm",
     "Thunderstorm Wind",
@@ -36,20 +36,20 @@ EVENT_TYPES = [
     "Tropical Depression",
     "Flash Flood",
     "Tropical Storm",
-    "Flood",
-    "Tsunami",
-    "Freezing Fog",
-    "Volcanic Ash",
-    "Frost/Freeze",
-    "Funnel Cloud",
+    # "Flood",
+    # "Tsunami",
+    # "Freezing Fog",
+    # "Volcanic Ash",
+    # "Frost/Freeze",
+    # "Funnel Cloud",
     "Wildfire",
     "Hail",
     "Winter Storm",
-    "Heat",
-    "Winter Weather",
+    # "Heat",
+    # "Winter Weather",
     "Heavy Rain",
     "Heavy Snow",
-    "High Surf",
+    # "High Surf",
     "High Wind",
     "Hurricane (Typhoon)",
     "Ice Storm",
@@ -69,9 +69,9 @@ NORMALIZE_COLUMNS.remove("TOR_F_SCALE")
 NUMERIC_COLUMNS = NORMALIZE_COLUMNS + EVENT_TYPES
 
 CLUSTER_METHOD = sk_cluster.MiniBatchKMeans
-KWARGS = {"n_clusters": 10}
+KWARGS = {"n_clusters": 4}
 ATTR = "cluster_centers_"
-TRAIN_PCT = 0.5
+TRAIN_PCT = 0.8
 
 
 def main():
@@ -93,6 +93,7 @@ def each_year():
     for filename in os.listdir("normalized_data"):
         filename = os.path.join("normalized_data", filename)
         data = get_numeric_data(filename)
+        data.dropna(inplace=True)
         if TRAIN_PCT < 1:
             data, _ = train_test_split(data, train_size=TRAIN_PCT)
         if centers is None:
@@ -106,8 +107,6 @@ def each_year():
 
 def get_numeric_data(filename):
     data = pd.read_pickle(filename)
-    data.index = data["EVENT_ID"]
-    data = data.drop(columns="EVENT_ID")
     data = pd.get_dummies(
         data, columns=["EVENT_TYPE"], prefix=[""], prefix_sep=""
     )
@@ -120,6 +119,8 @@ def get_numeric_data(filename):
                 ],
                 axis=1,
             )
+    data.index = data["EVENT_ID"]
+    data = data.drop(columns="EVENT_ID")
     data = data[NUMERIC_COLUMNS]
     return data
 

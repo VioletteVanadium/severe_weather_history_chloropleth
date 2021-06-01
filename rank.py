@@ -7,7 +7,7 @@ import pandas as pd
 
 from cluster import ATTR, get_numeric_data
 
-ONLY_NEW = True
+ONLY_NEW = False
 
 
 def main():
@@ -25,6 +25,7 @@ def main():
             continue
         print("Labeling", labeled_fn)
         data = get_numeric_data(normalized_fn)
+        data.dropna(inplace=True)
         labels = km.predict(data)
         data = pd.read_pickle(normalized_fn)
         data = pd.concat(

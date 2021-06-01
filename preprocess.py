@@ -74,10 +74,19 @@ def main(args: argparse.Namespace) -> None:
         stats.append((year, mean, var))
 
     if args.start_year:
-        years = [str(year) for year in range(args.start_year, 2021)]
+        years = [str(year) for year in range(args.start_year, 2020)]
     else:
-        years = [str(year) for year in range(1950, 2021)]
+        years = [str(year) for year in range(2010, 2020)]
     download(years, force=args.download)
+    population = pd.read_csv("co-est2019-alldata.csv")
+    join_columns(
+        population,
+        lambda x, y: "{:02}{:03}".format(x, y),
+        ("FIPS", ["STATE", "COUNTY"]),
+    )
+    population = population[
+        ["FIPS"] + ["POPESTIMATE{}".format(y) for y in years]
+    ]
 
     # initial cleaning and column selection
     stats = []
@@ -85,7 +94,7 @@ def main(args: argparse.Namespace) -> None:
     threads = Queue(maxsize=PROCS)
     with Pool(processes=PROCS, initializer=cpu_limit) as pool:
         for year in years:
-            t = pool.apply_async(clean_pickle, (year, args.clean))
+            t = pool.apply_async(clean_pickle, (year, population, args.clean))
             threads.put((t, year))
             if threads.full():
                 thread_main()
@@ -133,10 +142,10 @@ def download(years, force=False):
                 ftp.retrbinary("RETR " + filename, f.write)
 
 
-def clean_pickle(year, clean=False):
+def clean_pickle(year, population=None, clean=False):
     pickle_name = "clean_data/{}.pkl".format(year)
     if clean or not os.path.exists(pickle_name):
-        data = get_data(year)
+        data = get_data(year, population)
         print("Saving", pickle_name)
         data.to_pickle(pickle_name)
     else:
@@ -144,7 +153,7 @@ def clean_pickle(year, clean=False):
     return data
 
 
-def get_data(year: Union[str, int]) -> pd.DataFrame:
+def get_data(year: Union[str, int], population) -> pd.DataFrame:
     """
     Get all data in `./data` if year=None, or data for a specific year
     """
@@ -185,15 +194,54 @@ def get_data(year: Union[str, int]) -> pd.DataFrame:
             row["HAIL_SIZE"] = mag
         return row
 
+    year = str(year)
     for filename in os.listdir("data"):
         filename = os.path.join("data", filename)
-        if year is not None and YEAR_PATT.search(filename).group(1) == str(
-            year
-        ):
+        if YEAR_PATT.search(filename).group(1) == year:
             break
     print("Cleaning", filename)
     with gzip.open(filename) as f:
         data = pd.read_csv(f, usecols=GET_COLUMNS, low_memory=False)
+
+    # exclude maritime event types
+    data = data[data["CZ_TYPE"] != "M"]
+    # combine type and fips to single column
+    data = join_columns(
+        data,
+        lambda y, z: "{:02d}{:03d}".format(int(y), int(z)),
+        ("FIPS", ["STATE_FIPS", "CZ_FIPS"]),
+    )
+    # combine city/state into same column
+    data = join_columns(
+        data,
+        lambda x, y: "{}, {}".format(x, y),
+        ("LOC_NAME", ["CZ_NAME", "STATE"]),
+    )
+    for col in ["DAMAGE_PROPERTY", "DAMAGE_CROPS"]:
+        data[col] = data[col].map(map_damage)
+
+    # scale by population
+    pop = population[["FIPS", "POPESTIMATE{}".format(year)]]
+    pop = pop.set_index("FIPS")["POPESTIMATE{}".format(year)]
+    pop = pop / pop.mean()
+
+    def div_pop(row):
+        for col in [
+            "DAMAGE_PROPERTY",
+            "DAMAGE_CROPS",
+            "INJURIES_DIRECT",
+            "INJURIES_INDIRECT",
+            "DEATHS_DIRECT",
+            "DEATHS_INDIRECT",
+        ]:
+            if row["FIPS"] not in pop:
+                row[col] = np.nan
+            else:
+                row[col] = row[col] / pop[row["FIPS"]]
+        return row
+
+    data = data.apply(div_pop, axis=1)
+
     # combine lat/lng into single column
     data = join_columns(
         data,
@@ -201,6 +249,7 @@ def get_data(year: Union[str, int]) -> pd.DataFrame:
         ("BEGIN_LOC", ["BEGIN_LAT", "BEGIN_LON"]),
         ("END_LOC", ["END_LAT", "END_LON"]),
     )
+
     # combine date/time related columns into single datetime column
     data = join_columns(
         data,
@@ -225,34 +274,16 @@ def get_data(year: Union[str, int]) -> pd.DataFrame:
         ("DURATION", ["BEGIN_DATE_TIME", "END_DATE_TIME"]),
         keep_old=True,
     )
-    # exclude maritime event types
-    data = data[data["CZ_TYPE"] != "M"]
-    # combine type and fips to single column
-    data = join_columns(
-        data,
-        lambda y, z: "{:02d}{:03d}".format(int(y), int(z)),
-        ("FIPS", ["STATE_FIPS", "CZ_FIPS"]),
-    )
-    # combine city/state into same column
-    data = join_columns(
-        data,
-        lambda x, y: "{}, {}".format(x, y),
-        ("LOC_NAME", ["CZ_NAME", "STATE"]),
-    )
+
     # fill NaN with 0 for columns that it makes sense for
     for col in [
         "MAGNITUDE",
-        "DAMAGE_PROPERTY",
-        "DAMAGE_CROPS",
         "TOR_LENGTH",
         "TOR_WIDTH",
     ]:
         data[col] = data[col].fillna(0)
     # remove "EF" or "F" from tornado scale entries
     data["TOR_F_SCALE"] = data["TOR_F_SCALE"].map(map_f_scale)
-    # convert K/M/B suffixes to pure numbers
-    for col in ["DAMAGE_PROPERTY", "DAMAGE_CROPS"]:
-        data[col] = data[col].map(map_damage)
     # split MAGNITUDE according to MAGNITUDE_TYPE
     data = data.apply(split_mag, axis=1)
     # remove unneeded columns
