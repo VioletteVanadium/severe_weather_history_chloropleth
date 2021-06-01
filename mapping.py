@@ -56,24 +56,6 @@ def main():
         range_color=(-1, 1),
     )
     fig.show()
-    exit()
-
-    m = folium.Map(location=[39, -98], zoom_start=5)
-    with open("topo_json_us_counties.json") as f:
-        topo = json.load(f)
-    folium.Choropleth(
-        geo_data=topo,
-        data=geo_data.reset_index(),
-        columns=["FIPS", "SEVERITY"],
-        key_on="feature.id",
-        topojson="objects.us_counties_20m",
-        fill_color="Reds",
-        fill_opacity=1,
-        line_opacity=1,
-        legend_name="Sever Weather Intensity",
-        bins=8,
-    ).add_to(m)
-    m.save("map.html")
 
 
 if __name__ == "__main__":
