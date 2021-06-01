@@ -2,14 +2,8 @@
 import json
 from urllib.request import urlopen
 
-import branca
-import fiona
-import folium
-import numpy as np
 import pandas as pd
 import plotly.express as px
-from shapely.geometry.multipolygon import MultiPolygon
-from shapely.geometry.polygon import Polygon
 
 NORM_AREA = True
 

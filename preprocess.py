@@ -1,18 +1,14 @@
 #! /usr/bin/env python3
 import argparse
-import datetime
 import gzip
 import os
 import re
-import resource
-import time
 from collections.abc import Callable
 from ftplib import FTP
 from multiprocessing import Pool
 from queue import Queue
 from typing import Any, Union
 
-import geopy
 import numpy as np
 import pandas as pd
 
